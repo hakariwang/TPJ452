@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Condo Parking System</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        .parking-lot { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; justify-content: center; margin-top: 20px; padding: 20px; border-radius: 10px; }
+        .spot { width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; border-radius: 10px; background-color: lightgray; }
+        .available { background-color: green; }
+        .occupied { background-color: lightgray; color: black; }
+        .resident { background-color: lightblue; color: white; }
+        table { width: 50%; margin: 20px auto; border-collapse: collapse; }
+        th, td { border: 1px solid black; padding: 10px; }
+        .status-available { color: green; font-weight: bold; }
+        .status-occupied { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Smart Condo Parking System</h1>
+    <div class="parking-lot" id="parkingLot"></div>
+    <h2>Guest Parking Status</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Parking Spot</th>
+                <th>License Plate</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="parkingTable"></tbody>
+    </table>
+    <script>
+        const blynkAuth = "rTAuhVVxENpdPFt9mFy1Mh_N6i68hub1";
+        const residentSpots = ["P1", "P2", "P3"];
+        const guestSpots = { "G1": ["V0", "V1"], "G2": ["V3", "V4"], "G3": ["V6", "V7"], "G4": ["V9", "V10"] };
+        let lastStatuses = {};
+        let lastLicensePlates = {};
+        
+        async function fetchParkingData() {
+            let parkingLotDiv = document.getElementById("parkingLot");
+            let parkingTable = document.getElementById("parkingTable");
+            let updateNeeded = false;
+            
+            for (let [spot, pins] of Object.entries(guestSpots)) {
+                try {
+                    let statusResponse = await fetch(`https://blynk.cloud/external/api/get?token=${blynkAuth}&${pins[0]}`);
+                    let licenseResponse = await fetch(`https://blynk.cloud/external/api/get?token=${blynkAuth}&${pins[1]}`);
+                    
+                    if (!statusResponse.ok || !licenseResponse.ok) throw new Error("Fetch failed");
+                    
+                    let status = await statusResponse.text();
+                    let licensePlate = await licenseResponse.text();
+                    
+                    let newStatus = (status.trim() === "1" || status.trim().toLowerCase() === "available") ? "available" : "occupied";
+                    
+                    if (lastStatuses[spot] !== newStatus || lastLicensePlates[spot] !== licensePlate) {
+                        lastStatuses[spot] = newStatus;
+                        lastLicensePlates[spot] = licensePlate;
+                        updateNeeded = true;
+                    }
+                } catch (error) {
+                    console.error(`Error fetching data for ${spot}:`, error);
+                }
+            }
+            
+            if (updateNeeded) {
+                updateDisplay();
+            }
+        }
+        
+        function updateDisplay() {
+            let parkingLotDiv = document.getElementById("parkingLot");
+            let parkingTable = document.getElementById("parkingTable");
+            
+            parkingLotDiv.innerHTML = "";
+            parkingTable.innerHTML = "";
+            
+            residentSpots.forEach(spot => {
+                let spotDiv = document.createElement("div");
+                spotDiv.className = "spot resident";
+                spotDiv.innerText = spot;
+                parkingLotDiv.appendChild(spotDiv);
+            });
+            
+            for (let [spot, status] of Object.entries(lastStatuses)) {
+                let spotDiv = document.createElement("div");
+                spotDiv.className = `spot ${status === 'available' ? 'available' : 'occupied'}`;
+                spotDiv.innerText = spot;
+                parkingLotDiv.appendChild(spotDiv);
+                
+                let row = `<tr>
+                    <td>${spot}</td>
+                    <td>${lastLicensePlates[spot] || 'N/A'}</td>
+                    <td class="${status === 'available' ? 'status-available' : 'status-occupied'}">${status.charAt(0).toUpperCase() + status.slice(1)}</td>
+                </tr>`;
+                parkingTable.innerHTML += row;
+            }
+        }
+        
+        fetchParkingData();
+        setInterval(fetchParkingData, 10000);
+    </script>
+</body>
+</html>
